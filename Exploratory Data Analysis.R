@@ -34,7 +34,7 @@ dcData$timeSlot<-ifelse(dcData$Hour%%2==0,dcData$Hour+1,dcData$Hour)
 dcData$timeSlot<-dcData$timeSlot-1
 dcData$timeSlot<-dcData$timeSlot/2
 grouped_data <- aggregate(dcData$cluster, by=list(dcData$cluster, dcData$Weekday, dcData$timeSlot), FUN=length)
-grouped_data2<- aggregate(dcData$ï..DURATION, by=list(dcData$cluster, dcData$Weekday, dcData$timeSlot), FUN=sum)
+grouped_data2<- aggregate(dcData$Ã¯..DURATION, by=list(dcData$cluster, dcData$Weekday, dcData$timeSlot), FUN=sum)
 grouped_data3<- aggregate(dcData$TOTALAMOUNT, by=list(dcData$cluster, dcData$Weekday, dcData$timeSlot), FUN=sum)
 
 Clustered_Data<-grouped_data

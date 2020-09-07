@@ -1,0 +1,204 @@
+!@encoding CP1252
+model ScheduleOptimizer 
+uses "mmsheet";
+uses "mmxprs";
+uses "mmive";
+
+declarations
+	
+!timeslot and regions choices available
+weekday_choices=1..7
+timeslot_choices=0..11
+
+!=====================================
+!driver's preference
+max_hours_per_week=16
+region_available=[0,1,2]
+timeslot_available=[3,4,5]
+weekday_available=[1,2,3]
+!=====================================
+	
+!variables for calculations and looping
+i=1..420
+p_min=0.5
+p_max=1
+avg_revenue=12
+max_demand: real
+min_demand: real
+multiplier: real
+Total_Revenue: real
+p_min_mc: real
+temp: real
+j: integer
+k: integer
+f: integer
+
+!variable to read data from the Excel file
+Max_Trip_Duration:array(i) of real
+Weekday:array(i) of integer
+Region:array(i) of integer
+Timeslot:array(i) of integer
+Pickup_Demand:array(i) of integer
+Amount:array(i) of real
+
+!array and matrices to store the calculated values
+P_New_Customer:array(i) of real
+pickup_demand:array(i) of integer
+min_trips:array(i) of integer
+Revenue:array(i) of real
+mc_revenue:array(i) of real
+Revenue_matrix:array(i,i,i) of real
+demand_matrix:array(i,i,i) of integer
+mintrips_matrix:array(i,i,i) of integer
+amount_matrix:array(i,i,i) of real
+
+!to store the values from available time and region only
+Weekday_actual:array(i) of integer
+Region_actual:array(i) of integer
+Timeslot_actual:array(i) of integer
+P_New_Customer_actual:array(i) of real
+min_trips_actual:array(i) of integer
+Revenue_actual:array(i) of real
+demand_actual:array(i) of integer
+amount_actual:array(i) of real
+
+!to extract final solution for Monte Carlo Simulation
+Final_Region:array(i) of integer
+Final_Timeslot:array(i) of integer
+Final_Weekday:array(i) of integer
+Final_demand:array(i) of integer
+Final_mintrips:array(i) of integer
+Final_amount:array(i) of real
+
+!decision variable
+X:array(i,i,i) of mpvar
+end-declarations
+
+!read the Excel data
+initializations from "mmsheet.xlsx:"+"TripDetails.xlsx"
+	[Region,Weekday,Timeslot,Pickup_Demand,Max_Trip_Duration,Amount] as "skiph;[A:G]"
+end-initializations
+
+!probability of getting new customer
+max_demand:=max(x in i)Pickup_Demand(x)
+min_demand:=min(x in i)Pickup_Demand(x)
+forall (x in i) do
+	multiplier:=(Pickup_Demand(x) - min_demand)/(max_demand-min_demand)
+	P_New_Customer(x):=p_min + multiplier * (p_max-p_min)
+end-do
+
+!minimum trips per 2hr time slot
+forall (x in i) do
+	min_trips(x):=floor(7200/Max_Trip_Duration(x))
+end-do
+
+!revenue
+forall (x in i) do
+	Revenue(x):=P_New_Customer(x)*min_trips(x)*Amount(x)
+end-do
+
+!removing unavailable timeslots and regions
+j:=0
+forall (w in i) do
+	forall (x in region_available) do
+		forall (y in timeslot_available) do
+			forall (z in weekday_available) do
+				if(Region(w)=x and Timeslot(w)=y and Weekday(w)=z) then
+					j+=1
+					Region_actual(j):=Region(w)
+					Timeslot_actual(j):=Timeslot(w)
+					Weekday_actual(j):=Weekday(w)
+					P_New_Customer_actual(j):=P_New_Customer(w)
+					min_trips_actual(j):=min_trips(w)
+					Revenue_actual(j):=Revenue(w)
+					demand_actual(j):=Pickup_Demand(w)
+					amount_actual(j):=Amount(w)
+				end-if
+			end-do
+		end-do
+	end-do
+end-do
+
+!Revenue,min_trip and demand matrix
+forall (x in 1..j) do
+	Revenue_matrix(Timeslot_actual(x)+1,Region_actual(x)+1,Weekday_actual(x)):=Revenue_actual(x)
+	demand_matrix(Timeslot_actual(x)+1,Region_actual(x)+1,Weekday_actual(x)):=demand_actual(x)
+	mintrips_matrix(Timeslot_actual(x)+1,Region_actual(x)+1,Weekday_actual(x)):=min_trips_actual(x)
+	amount_matrix(Timeslot_actual(x)+1,Region_actual(x)+1,Weekday_actual(x)):=amount_actual(x)
+end-do
+
+!setting decision variables as binary
+forall(x in timeslot_available,y in region_available,z in weekday_available) do
+	X(x+1,y+1,z) is_binary
+end-do
+
+!objective
+obj:= sum(x in timeslot_available)sum(y in region_available)sum(z in weekday_available)Revenue_matrix(x+1,y+1,z)*X(x+1,y+1,z)
+
+
+!constraints
+
+!max working hour constraint
+sum(x in timeslot_available)sum(y in region_available)sum(z in weekday_available)X(x+1,y+1,z)<=max_hours_per_week/2
+
+!two regions should not be assigned at same timeslot
+forall (z in weekday_available) do
+	forall (x in timeslot_available) do 
+		sum(y in region_available)X(x+1,y+1,z)<=1
+	end-do
+end-do
+
+maximize(obj)
+
+!calculating total revenue and extracting final solution for monte carlo simulation
+f:=1
+forall (x in timeslot_available,y in region_available,z in weekday_available) do
+	if(getsol(X(x+1,y+1,z))=1) then
+	    Final_Region(f):=y
+	    Final_Timeslot(f):=x
+	    Final_Weekday(f):=z
+	    Final_demand(f):=demand_matrix(x+1,y+1,z)
+	    Final_mintrips(f):=mintrips_matrix(x+1,y+1,z)
+	    Final_amount(f):=amount_matrix(x+1,y+1,z)
+	    f+=1
+		Total_Revenue+=Revenue_matrix(x+1,y+1,z)
+	end-if
+end-do
+
+!print final optimal solution
+writeln("Optimized Schedule:")
+f:=1
+forall (x in timeslot_available,y in region_available,z in weekday_available) do
+	if(getsol(X(x+1,y+1,z))=1) then
+	    f+=1
+		writeln("Region:"+y+" Timeslot:"+x+ " Weekday:" + z + " - Revenue:$"+floor(Revenue_matrix(x+1,y+1,z)))
+	end-if
+end-do
+writeln("Total Revenue per week:$"+floor(Total_Revenue))
+writeln("(with 0.5 min probability)")
+
+!Monte Carlo Simulation
+writeln(" ")
+writeln("Monte Carlo Simulation:")
+forall (mc in 1..200) do
+	
+	p_min_mc:=((random/4)+0.4)
+	!writeln(p_min_mc)
+	forall (x in 1..f) do
+		multiplier:=(Final_demand(x) - min_demand)/(max_demand-min_demand)
+		P_New_Customer(x):=p_min_mc + multiplier * (p_max-p_min_mc)
+		Revenue(x):=P_New_Customer(x)*Final_mintrips(x)*Final_amount(x)
+	end-do
+	mc_revenue(mc):=sum(x in 1..f)Revenue(x)	
+end-do
+
+writeln("Total Revenue: $"+floor(sum(x in 1..200)mc_revenue(x)/200)+" after 200 simulations")
+writeln("(with min probability range 0.4 to 0.65)")
+
+!write the simulation results to Excel file
+!initializations to "mmsheet.excel:"+"output.xlsx"
+!  mc_revenue as "[Sheet1$A2:B201]"
+!end-initializations
+
+end-model
+

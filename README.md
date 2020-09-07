@@ -1,1 +1,4 @@
-# DC-Taxi-Driver-Schedule-Optimization
+## DC-Taxi-Driver-Schedule-Optimization
+
+Revenue earned by the taxi drivers is highly dependent on the route, day, and time they are driving. The traffic in a route varies during different times of the day, also varies depending on the day of the week, as few routes may have high traffic during weekdays, few may have high traffic during weekends. Thus, if a driver chooses an optimal route, day, and time to drive, they can earn more revenue.
+To address this problem, in this paper we aim to formulate an optimization model using mixed integer programming. The driver can feed the region, day, and time they are available in a week to drive. This model utilizes the past taxi trip records to arrive at an optimal driving schedule for the week. Further, we perform Monte Carlo simulation on the revenue calculation by varying the probability of getting a new trip, which gives the optimal total revenue a driver can make in a week.
